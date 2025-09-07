@@ -1,10 +1,3 @@
-# Streamlit Cloud 배포용 - Selenium 제거 버전
-streamlit==1.29.0
-pandas==2.1.4
-numpy==1.26.2
-plotly==5.18.0
-requests==2.31.0
-openpyxl==3.1.2
-xlsxwriter==3.1.9
-python-dotenv==1.0.0
-pytz==2023.3
+streamlit
+pandas
+plotly
