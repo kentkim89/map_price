@@ -1,27 +1,10 @@
-# Streamlit Cloud 배포용 requirements.txt
-# 최소한의 필수 패키지만 포함
-
-# 웹 대시보드
+# Streamlit Cloud 배포용 - Selenium 제거 버전
 streamlit==1.29.0
-
-# 데이터 처리
 pandas==2.1.4
 numpy==1.26.2
-
-# 시각화
 plotly==5.18.0
-
-# 웹 크롤링
-selenium==4.16.0
-webdriver-manager==4.0.1
-
-# HTTP 통신
 requests==2.31.0
-
-# Excel 파일 처리
 openpyxl==3.1.2
 xlsxwriter==3.1.9
-
-# 유틸리티
 python-dotenv==1.0.0
 pytz==2023.3
