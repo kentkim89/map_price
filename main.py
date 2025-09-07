@@ -14,11 +14,6 @@ import time
 import random
 from typing import List, Dict, Optional
 import requests
-from selenium import webdriver
-from selenium.webdriver.common.by import By
-from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
 import re
 
 # 페이지 설정
@@ -72,20 +67,6 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# 크롤링 함수 (Streamlit Cloud용 수정)
-def setup_chrome_options():
-    """Chrome 옵션 설정 - Streamlit Cloud 환경"""
-    options = Options()
-    options.add_argument('--headless')
-    options.add_argument('--no-sandbox')
-    options.add_argument('--disable-dev-shm-usage')
-    options.add_argument('--disable-gpu')
-    options.add_argument('--disable-features=VizDisplayCompositor')
-    options.add_argument('--disable-blink-features=AutomationControlled')
-    options.add_experimental_option("excludeSwitches", ["enable-automation"])
-    options.add_experimental_option('useAutomationExtension', False)
-    return options
-
 def extract_price(price_text: str) -> Optional[int]:
     """가격 추출"""
     try:
@@ -94,35 +75,35 @@ def extract_price(price_text: str) -> Optional[int]:
     except:
         return None
 
-def crawl_product(product: dict, progress_bar=None, status_text=None) -> List[dict]:
-    """제품 크롤링 (간소화 버전)"""
+def simulate_crawl_product(product: dict, progress_bar=None, status_text=None) -> List[dict]:
+    """제품 크롤링 시뮬레이션"""
     violations = []
     
     try:
         if status_text:
             status_text.text(f"🔍 검색 중: {product['name']}")
         
-        # Selenium 대신 더미 데이터 생성 (Streamlit Cloud에서는 Selenium 제한적)
-        # 실제 배포시에는 API나 다른 방법 사용 권장
+        # 시뮬레이션 데이터 생성
+        sample_vendors = ["네이버스토어A", "쿠팡셀러B", "G마켓샵", "11번가몰", "위메프딜"]
         
-        # 시뮬레이션 데이터
-        sample_vendors = ["A마켓", "B쇼핑", "C몰", "D스토어", "E마트"]
+        # 랜덤하게 0~3개 업체에서 위반 생성
+        num_violations = random.randint(0, 3)
+        selected_vendors = random.sample(sample_vendors, num_violations)
         
-        for vendor in random.sample(sample_vendors, random.randint(0, 3)):
-            # 랜덤하게 위반 생성
-            if random.random() > 0.5:  # 50% 확률로 위반
-                violation_price = int(product['map_price'] * random.uniform(0.85, 0.95))
-                
-                violations.append({
-                    'brand': product['brand'],
-                    'product_name': product['name'],
-                    'map_price': product['map_price'],
-                    'vendor_name': vendor,
-                    'violation_price': violation_price,
-                    'violation_rate': round((product['map_price'] - violation_price) / product['map_price'] * 100, 1),
-                    'discovered_at': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                    'status': '신규'
-                })
+        for vendor in selected_vendors:
+            # 위반 가격 생성 (MAP의 85~95%)
+            violation_price = int(product['map_price'] * random.uniform(0.85, 0.95))
+            
+            violations.append({
+                'brand': product['brand'],
+                'product_name': product['name'],
+                'map_price': product['map_price'],
+                'vendor_name': vendor,
+                'violation_price': violation_price,
+                'violation_rate': round((product['map_price'] - violation_price) / product['map_price'] * 100, 1),
+                'discovered_at': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                'status': '신규'
+            })
         
         # 진행 상황 업데이트
         if progress_bar:
@@ -198,13 +179,25 @@ with st.sidebar:
     slack_webhook = st.text_input(
         "Slack Webhook URL",
         type="password",
-        placeholder="https://hooks.slack.com/..."
+        placeholder="https://hooks.slack.com/...",
+        help="Slack 알림을 받을 Webhook URL"
     )
     
     email_notification = st.text_input(
         "알림 이메일",
-        placeholder="admin@company.com"
+        placeholder="admin@company.com",
+        help="위반 발견 시 알림을 받을 이메일"
     )
+    
+    st.divider()
+    
+    # 정보
+    st.info("""
+    💡 **사용 방법**
+    1. MAP 가격 설정
+    2. '실시간 모니터링' 탭으로 이동
+    3. '즉시 스캔 시작' 클릭
+    """)
 
 # 메인 컨텐츠 - 탭
 tab1, tab2, tab3, tab4 = st.tabs(["📊 대시보드", "🔍 실시간 모니터링", "📈 통계", "📋 위반 이력"])
@@ -256,19 +249,24 @@ with tab1:
     st.subheader("🚨 최근 위반 내역")
     
     if st.session_state.violations:
-        df_violations = pd.DataFrame(st.session_state.violations[-10:])
+        # 최근 10건만 표시
+        recent_violations = st.session_state.violations[-10:]
+        recent_violations.reverse()  # 최신 순으로 정렬
         
-        # 컬럼 순서 조정
-        columns = ['discovered_at', 'brand', 'product_name', 'vendor_name', 
-                  'violation_price', 'map_price', 'violation_rate', 'status']
-        df_violations = df_violations[columns]
+        df_violations = pd.DataFrame(recent_violations)
         
-        # 컬럼명 한글화
-        df_violations.columns = ['발견시간', '브랜드', '제품명', '업체명', 
-                                '위반가격', 'MAP', '위반율(%)', '상태']
+        # 컬럼 순서 조정 및 이름 변경
+        df_display = df_violations[['discovered_at', 'brand', 'product_name', 'vendor_name', 
+                                   'violation_price', 'map_price', 'violation_rate', 'status']].copy()
+        df_display.columns = ['발견시간', '브랜드', '제품명', '업체명', 
+                             '위반가격', 'MAP', '위반율(%)', '상태']
+        
+        # 가격 포맷팅
+        df_display['위반가격'] = df_display['위반가격'].apply(lambda x: f"{x:,}원")
+        df_display['MAP'] = df_display['MAP'].apply(lambda x: f"{x:,}원")
         
         st.dataframe(
-            df_violations,
+            df_display,
             use_container_width=True,
             hide_index=True
         )
@@ -289,7 +287,8 @@ with tab1:
             fig = px.pie(
                 values=list(brand_counts.values()),
                 names=list(brand_counts.keys()),
-                color_discrete_map={'고래미': '#FF6B6B', '설래담': '#4ECDC4'}
+                color_discrete_map={'고래미': '#FF6B6B', '설래담': '#4ECDC4'},
+                title=""
             )
             st.plotly_chart(fig, use_container_width=True)
         else:
@@ -304,7 +303,11 @@ with tab1:
                 x='time',
                 y='violations',
                 markers=True,
-                title="위반 건수 추이"
+                title=""
+            )
+            fig.update_layout(
+                xaxis_title="스캔 시간",
+                yaxis_title="위반 건수"
             )
             st.plotly_chart(fig, use_container_width=True)
         else:
@@ -314,7 +317,14 @@ with tab1:
 with tab2:
     st.subheader("🔍 실시간 가격 모니터링")
     
-    col1, col2, col3 = st.columns(3)
+    st.markdown("""
+    <div style='background-color: #f0f2f6; padding: 1rem; border-radius: 10px; margin-bottom: 1rem;'>
+        <p>📌 <strong>시뮬레이션 모드</strong></p>
+        <p>현재 테스트용 시뮬레이션 데이터를 생성합니다. 실제 네이버 쇼핑 데이터와는 다를 수 있습니다.</p>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    col1, col2, col3 = st.columns([1, 2, 1])
     
     with col2:
         if st.button("🚀 즉시 스캔 시작", type="primary", use_container_width=True):
@@ -328,8 +338,8 @@ with tab2:
                     progress = (i + 1) / len(products)
                     progress_bar.progress(progress)
                     
-                    # 크롤링 실행
-                    violations = crawl_product(product, progress_bar, status_text)
+                    # 시뮬레이션 크롤링 실행
+                    violations = simulate_crawl_product(product, progress_bar, status_text)
                     all_violations.extend(violations)
                     
                     time.sleep(1)  # 시뮬레이션 딜레이
@@ -350,18 +360,18 @@ with tab2:
                     st.balloons()
                     
                     # 위반 상세 표시
+                    st.subheader("발견된 위반 내역")
                     for v in all_violations:
-                        st.markdown(f"""
-                        <div class="violation-alert">
-                        <strong>⚠️ 위반 발견</strong><br>
-                        제품: {v['product_name']}<br>
-                        업체: {v['vendor_name']}<br>
-                        위반가격: {v['violation_price']:,}원 (MAP: {v['map_price']:,}원)<br>
-                        위반율: {v['violation_rate']}%
-                        </div>
-                        """, unsafe_allow_html=True)
+                        with st.expander(f"⚠️ {v['vendor_name']} - {v['product_name']}"):
+                            col1, col2, col3 = st.columns(3)
+                            with col1:
+                                st.metric("위반 가격", f"{v['violation_price']:,}원")
+                            with col2:
+                                st.metric("MAP 가격", f"{v['map_price']:,}원")
+                            with col3:
+                                st.metric("위반율", f"{v['violation_rate']}%")
                 else:
-                    st.info("스캔 완료! 위반 사항이 없습니다.")
+                    st.info("✅ 스캔 완료! 위반 사항이 없습니다.")
     
     st.divider()
     
@@ -373,8 +383,12 @@ with tab2:
         if st.session_state.last_scan:
             st.text(f"[{st.session_state.last_scan}] 마지막 스캔 완료")
         
-        for violation in st.session_state.violations[-5:]:
-            st.text(f"[{violation['discovered_at']}] ⚠️ {violation['vendor_name']} - {violation['product_name']} ({violation['violation_price']:,}원)")
+        if st.session_state.violations:
+            st.text("--- 최근 위반 내역 ---")
+            for violation in st.session_state.violations[-5:]:
+                st.text(f"[{violation['discovered_at']}] ⚠️ {violation['vendor_name']} - {violation['product_name']} ({violation['violation_price']:,}원)")
+        else:
+            st.text("위반 내역이 없습니다.")
 
 # 통계 탭
 with tab3:
@@ -405,14 +419,17 @@ with tab3:
             product_stats.columns = ['평균 위반율(%)', '최저가격', '위반업체수']
             st.dataframe(product_stats, use_container_width=True)
         
+        st.divider()
+        
         # 위반율 분포
         st.subheader("📊 위반율 분포")
         fig = px.histogram(
             df_stats,
             x='violation_rate',
             nbins=20,
-            title='MAP 위반율 분포',
-            labels={'violation_rate': '위반율(%)', 'count': '건수'}
+            title='',
+            labels={'violation_rate': '위반율(%)', 'count': '건수'},
+            color_discrete_sequence=['#667eea']
         )
         st.plotly_chart(fig, use_container_width=True)
     else:
@@ -422,22 +439,28 @@ with tab3:
 with tab4:
     st.subheader("📋 전체 위반 이력")
     
-    if st.session_state.violations:
-        # 필터
-        col1, col2, col3 = st.columns(3)
-        
-        with col1:
-            filter_brand = st.selectbox("브랜드", ["전체", "고래미", "설래담"])
-        
-        with col2:
-            filter_status = st.selectbox("상태", ["전체", "신규", "처리중", "완료"])
-        
-        with col3:
-            if st.button("🗑️ 데이터 초기화"):
+    col1, col2, col3, col4 = st.columns(4)
+    
+    with col1:
+        filter_brand = st.selectbox("브랜드 필터", ["전체", "고래미", "설래담"])
+    
+    with col2:
+        filter_status = st.selectbox("상태 필터", ["전체", "신규", "처리중", "완료"])
+    
+    with col3:
+        if st.button("🔄 새로고침"):
+            st.rerun()
+    
+    with col4:
+        if st.button("🗑️ 데이터 초기화", type="secondary"):
+            if st.button("정말 초기화하시겠습니까?", type="primary"):
                 st.session_state.violations = []
                 st.session_state.scan_history = []
+                st.session_state.last_scan = None
+                st.success("데이터가 초기화되었습니다.")
                 st.rerun()
-        
+    
+    if st.session_state.violations:
         # 데이터 필터링
         df_all = pd.DataFrame(st.session_state.violations)
         
@@ -447,24 +470,36 @@ with tab4:
         if filter_status != "전체":
             df_all = df_all[df_all['status'] == filter_status]
         
+        # 최신 순으로 정렬
+        df_all = df_all.sort_values('discovered_at', ascending=False)
+        
         # 테이블 표시
         st.dataframe(df_all, use_container_width=True, hide_index=True)
         
-        # CSV 다운로드
-        csv = df_all.to_csv(index=False, encoding='utf-8-sig')
-        st.download_button(
-            label="📥 CSV 다운로드",
-            data=csv,
-            file_name=f"violations_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
-            mime='text/csv'
-        )
+        # 다운로드 버튼
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            # CSV 다운로드
+            csv = df_all.to_csv(index=False, encoding='utf-8-sig')
+            st.download_button(
+                label="📥 CSV 다운로드",
+                data=csv,
+                file_name=f"violations_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                mime='text/csv'
+            )
+        
+        with col2:
+            # 요약 정보
+            st.metric("전체 위반 건수", f"{len(df_all)}건")
     else:
-        st.info("위반 이력이 없습니다.")
+        st.info("위반 이력이 없습니다. '실시간 모니터링' 탭에서 스캔을 시작해주세요.")
 
 # 푸터
 st.divider()
 st.markdown("""
 <div style='text-align: center; color: #888; padding: 1rem;'>
-    MAP 가격 모니터링 시스템 v1.0 | 고래미 & 설래담
+    <p>MAP 가격 모니터링 시스템 v1.0 | 고래미 & 설래담</p>
+    <p style='font-size: 0.8rem;'>© 2024 All rights reserved. Simulation Mode</p>
 </div>
 """, unsafe_allow_html=True)
